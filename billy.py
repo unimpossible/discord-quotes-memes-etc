@@ -421,10 +421,7 @@ def get_sandler_quote(message):
 async def on_ready():
     print('we have logged in as {0.user}'.format(client))
 
-    #print(await meme_response("https://qph.fs.quoracdn.net/main-qimg-6629312d21a5abd42a649e7cefa506b1-c", u"big 今夜21:30からはリゼロスラジ!オもうみんなはクリスマスのご飯食べはじめたのかな heydoi", "goodbye"))
-    #print(await meme_response("https://qph.fs.quoracdn.net/main-qimg-6629312d21a5abd42a649e7cefa506b1-c", "A big to do about nothing comes in all shapes and sizes boys", "goodbye"))
-
-
+    # uncomment this to download the full database
     #await quote_update()
 
     # tests
@@ -440,8 +437,6 @@ async def on_ready():
 
     #            print(await meme_previous(message, "howdy", "ok"))
     #            break
-    print(quote_get_user("notoriousRIP"))
-    print(quote_get_userid(483053994235658264))
     print(quote_get_leaderboard())
 
 @client.event
