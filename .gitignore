@@ -127,3 +127,18 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# Token file
+token
+
+# python virtual env
+bot-env/
+
+# database and log
+quotes.db
+discord.log
+
+# pictures
+memes/*
+pics/*
+*.DS_Store
