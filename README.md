@@ -10,7 +10,6 @@ Quotes, Memes, Billy Madison Bot
 ## TODO
 - Make the bot a class
 - Use @bot.command vs just reading every message
-- Not require returning of tuples, but returning a class of error
 - Allow returning multiple quotes for when multiple users are tagged
 
 ## Getting Started

@@ -55,11 +55,12 @@ Memes:
 
 Quotes:
 Note, only long messages (excl. URLs) are saved by default.
-!quote          A random quote from any user
+!quote          A random quote from any user from this channel
 !quote <user>   A quote from the specified user
                 Username is case sensitive
 !quote <userid> A quote from the specified user ID
 !quote channel  A quote from this channel
+!quote all      A quote from any channel and any user
 !quote count    Number of quotes we have
 !quote save     Save the last message from this channel, regardless of length.
 
@@ -77,15 +78,48 @@ v. 3.6 (002) Not Great, Not Terrible
 with open("billy.txt") as f:
     quotes = f.read().splitlines()
 
+class BotResponse(object):
+    """BotResponse."""
+
+    def __init__(self, resp=None):
+        """__init__.
+
+        :param resp: data to send back. If this is a string, we will respond
+        with this string, If it is a discord File object we will send it as an
+        attachment
+        """
+        self.discord_file = None
+        self.content = None
+        if type(resp) == discord.File:
+            self.discord_file = resp
+        else:
+            self.content = resp
+
+    async def send_response(self, client, message):
+        """send_response.
+
+        :param client: discord client
+        :param message: message which we are responding to
+        """
+        await message.channel.send(self.content, file=self.discord_file)
+
 client = discord.Client()
 
 # Helper functions
 
 # hash() is randomized, override it
 def _hash(s):
+    """_hash.
+
+    :param s:
+    """
     return hashlib.md5(s.encode('utf-8')).hexdigest()[:12]
 
 def _shlex(cmd):
+    """_shlex.
+
+    :param cmd:
+    """
     # unicode double quotes with ascii double quote
     # unicode single quote with ascii single quote
     cmd = re.sub(u"[\u201c\u201d\u201f]", '"', cmd)
@@ -97,6 +131,7 @@ def _shlex(cmd):
 async def quote_update():
     """
     Downloads old quotes into the database
+    Use this to update the database
     """
     print("Performing history quote gathering experience...")
     i = 0
@@ -113,6 +148,7 @@ async def quote_update():
                 quote_save(message)
 
 def quote_get_random():
+    """Return a single quote string."""
     quote_db_cursor.execute("SELECT user, message, date_added, channelid FROM quotes ORDER BY RANDOM() limit 1")
     query = quote_db_cursor.fetchone()
 
@@ -129,6 +165,13 @@ def quote_get_random():
     return msg
 
 def quote_get_random_channel(channel):
+    """quote_get_random_channel.
+
+    :param channel: channel to select a quote from
+
+    Return:
+        String of a random quote from this channel
+    """
     quote_db_cursor.execute("SELECT user, message, date_added FROM quotes WHERE channelid=(?) ORDER BY RANDOM() limit 1", (channel.id,))
     query = quote_db_cursor.fetchone()
 
@@ -143,6 +186,10 @@ def quote_get_random_channel(channel):
     return msg
 
 def quote_get_user(username):
+    """Get a quote string from the specified user.
+
+    :param username:
+    """
     quote_db_cursor.execute("SELECT message, date_added,channelid FROM quotes WHERE user=(?) ORDER BY RANDOM() LIMIT 1", (username,))
 
     query = quote_db_cursor.fetchone()
@@ -160,6 +207,10 @@ def quote_get_user(username):
     return msg
 
 def quote_get_userid(userid):
+    """Get a string of a quote from a specified user.
+
+    :param userid: integer user id to select quote from
+    """
     quote_db_cursor.execute("SELECT message, date_added,channelid, user FROM quotes WHERE userid=(?) ORDER BY RANDOM() LIMIT 1", (userid,))
 
     query = quote_db_cursor.fetchone()
@@ -177,6 +228,7 @@ def quote_get_userid(userid):
     return msg
 
 def quote_get_leaderboard():
+    """Returns a string of the leaderboard."""
     rows = quote_db_cursor.execute("SELECT count(*) from quotes")
     count = rows.fetchone()[0]
 
@@ -206,6 +258,11 @@ def quote_get_leaderboard():
     return resp
 
 def quote_save(message, skip_checks=False):
+    """quote_save.
+
+    :param message:
+    :param skip_checks:
+    """
     if not skip_checks:
         if len(message.content) < QUOTE_MIN_LEN:
             return
@@ -241,12 +298,12 @@ def quote_save(message, skip_checks=False):
 
 ### File Processor ###
 async def download_file(url):
-    """
-    Parameters
-    url
-      full url
-    Returns
-      error string or io bytes of the file downloaded
+    """download_file.
+
+    :param url: URL to download or the pre-baked name to use
+
+    Returns:
+        IO Bytes of the file downloaded or a BotResponse on error
     """
     err = "Sorry. No."
 
@@ -256,23 +313,32 @@ async def download_file(url):
     o = urlparse(url)
     invalid = ["localhost", "127.0", "192.", "pi.net", "routerlogin", "::1", "::2", "loopback", "raspberrypi"]
     if o == None:
-        return err + " Bad URL", None
+        return BotResponse(err + " Bad URL")
 
     if any(x in o.hostname for x in invalid):
         logger.log(logging.ERROR, "Tried receive " + url)
         print("do not " + url)
-        return err
+        return BotResponse(err)
 
     async with aiohttp.ClientSession() as session:
         async with session.get(url) as resp:
             if resp.status != 200:
                 print("got " + str(resp))
-                return err + " " + (str(resp.status))
+                return BotResponse(err + " " + (str(resp.status)))
 
             data = io.BytesIO(await resp.read())
             return data
 
 async def meme_previous(message, top, bottom):
+    """Finds the previous message in the channel and uses that to create a meme.
+
+    :param message: previous discord message
+    :param top: top text
+    :param bottom: bottom text
+
+    Returns:
+        BotResponse object
+    """
     # look for the previous image
     async for message in message.channel.history(limit=100):
         if message.author == client.user:
@@ -286,26 +352,32 @@ async def meme_previous(message, top, bottom):
                 continue
             return await meme_response(attachment.proxy_url, top, bottom)
 
-    return "Could not find one", None
+    return BotResponse("Could not find one")
 
 
 async def meme_response(url, topText, bottomText):
+    """meme_response.
+
+    :param url:
+    :param topText:
+    :param bottomText:
+    """
     data = await download_file(url)
-    if type(data) == str:
-        return data, None
+    if type(data) == BotResponse:
+        return data
 
     try:
         meme = meme_top_bottom_image(topText, bottomText, data)
     except Exception as e:
         logger.log(logging.ERROR, e)
-        return "I suck :(", None
+        return BotResponse("I suck :(")
 
 
     data = io.BytesIO()
     meme.save(data, format="jpeg")
     #meme.save("test.jpg")
     data.seek(0)
-    return None, discord.File(data, "meme.jpg")
+    return BotResponse(discord.File(data, "meme.jpg"))
 
 ### Command Processor ###
 async def early_out_response(lower, message):
@@ -315,31 +387,28 @@ async def early_out_response(lower, message):
     message: discord message structure
 
     Return
-    Tuple of (Response String, Response Discord File)
-    None for either indicates not to send a response of that type
-    None for both indicates this is not a command
-    If either is returned the caller should stop processing (hence 'early out')
+    BotResponse to send back or None if no response available
     """
     if lower.find("fuck adam sandler") >= 0:
-        return "Do not insult the greatest comedian of all time", None
+        return BotResponse("Do not insult the greatest comedian of all time")
 
     if lower.find("adam sandler sucks") >= 0:
-        return "Do not insult the greatest comedian of all time", None
+        return BotResponse("Do not insult the greatest comedian of all time")
 
     if lower.startswith("!billypic"):
         pic = random.choice(pics)
-        return None, discord.File(pic)
+        return BotResponse(discord.File(pic))
 
     if lower.startswith("!memelist"):
-        return ", ".join(memes), None
+        return BotResponse(", ".join(memes))
 
     if lower.startswith("!billy help"):
-        return usage, None
+        return BotResponse(usage)
 
     if lower.startswith("!meme"):
         cmd = _shlex(lower)
         if (len(cmd) != 3 and len(cmd) != 4):
-            return "syntax: !meme <image url> <top text> [bottom text]", None
+            return BotResponse("syntax: !meme <image url> <top text> [bottom text]")
 
         url = cmd[1]
         top = cmd[2]
@@ -349,46 +418,50 @@ async def early_out_response(lower, message):
 
         logger.log(logging.INFO, cmd)
         if url == "last":
-            err, pic = await meme_previous(message, top, bottom)
+            resp = await meme_previous(message, top, bottom)
         else:
-            err, pic = await meme_response(url, top, bottom)
-        if not err:
+            resp = await meme_response(url, top, bottom)
+        if resp.discord_file:
+            # remove the old image
             await message.edit(suppress=True)
-        return err, pic
+        return resp
 
     if lower.startswith("!quote"):
         argv = _shlex(lower)
 
         if len(argv) == 1:
-            return quote_get_random(), None
+            return BotResponse(quote_get_random_channel(message.channel))
 
         if argv[1] == 'channel':
-            return quote_get_random_channel(message.channel), None
+            return BotResponse(quote_get_random_channel(message.channel))
+
+        if argv[1] == 'all':
+            return BotResponse(quote_get_random())
 
         if argv[1] == 'count':
-            return quote_get_leaderboard(), None
+            return BotResponse(quote_get_leaderboard())
         if argv[1] == 'save':
             prev_message = message.channel.last_message_id
             prev_message = await message.channel.history(limit=2).flatten()
             prev_message = prev_message[1]
             quote_save(prev_message, True)
-            return "ok", None
+            return BotResponse("ok")
 
         if len(message.mentions) > 0:
             userid = message.mentions[0].id
-            return quote_get_userid(userid), None
+            return BotResponse(quote_get_userid(userid))
 
         # is this a user ID?
         try:
             userid = message.content[7:]
-            return quote_get_userid(userid), None
+            return BotResponse(quote_get_userid(int(userid)))
         except ValueError:
             pass
 
         # chop off quote, treat rest of command as username
-        return quote_get_user(message.content[7:]), None
+        return BotResponse(quote_get_user(message.content[7:]))
 
-    return None, None
+    return None
 
 
 def need_respond(lower):
@@ -410,15 +483,16 @@ def get_sandler_quote(message):
     lower = message.content.lower()
 
     if not need_respond(lower):
-        return None, None
+        return None
 
     quote = random.choice(quotes)
     quote = quote.replace("[[name]]", message.author.name)
-    return quote, None
+    return BotResponse(quote)
 
 ### Client Events ###
 @client.event
 async def on_ready():
+    """Ready callback."""
     print('we have logged in as {0.user}'.format(client))
 
     # uncomment this to download the full database
@@ -441,19 +515,23 @@ async def on_ready():
 
 @client.event
 async def on_message(message):
+    """on_message.
+
+    :param message: incoming message discord object
+    """
     if message.author == client.user:
         return
 
     print(message)
     lower = message.content.lower()
-    command_response, discord_file = await early_out_response(lower, message)
-    if (command_response or discord_file):
-        await message.channel.send(command_response, file=discord_file)
+    resp = await early_out_response(lower, message)
+    if resp:
+        await resp.send_response(client, message)
         return
 
-    response, discord_file = get_sandler_quote(message)
-    if response:
-        await message.channel.send(response, file=discord_file)
+    resp = get_sandler_quote(message)
+    if resp:
+        await resp.send_response(client, message)
 
     drinks = ["what ok", "wen drink", "when drink", "beer"]
     if any(x in lower for x in drinks):
