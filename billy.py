@@ -65,10 +65,10 @@ Note, only long messages (excl. URLs) are saved by default.
 !quote save     Save the last message from this channel, regardless of length.
 
 Billy Madison:
-!billy help     This Message
 !billypic       Picture
 !billy          Quote
 
+!help     This Message
 
 notoriousrip for compliments
 v. 3.6 (002) Not Great, Not Terrible
@@ -329,6 +329,21 @@ async def download_file(url):
             data = io.BytesIO(await resp.read())
             return data
 
+async def meme_attached(message, top, bottom):
+    if not message.attachments:
+        logger.log(logging.ERROR, message)
+        logger.log(logging.ERROR, message.embeds)
+        return BotResponse("No image to meme!")
+
+    img_exts = ["jpg", "jpeg", "png"]
+    for attachment in message.attachments:
+        if not any(attachment.proxy_url.endswith(x) for x in img_exts):
+            return BotResponse("I am dumb")
+        return await meme_response(attachment.proxy_url, top, bottom)
+
+    return BotResponse("how did i get here?")
+
+
 async def meme_previous(message, top, bottom):
     """Finds the previous message in the channel and uses that to create a meme.
 
@@ -402,11 +417,27 @@ async def early_out_response(lower, message):
     if lower.startswith("!memelist"):
         return BotResponse(", ".join(memes))
 
-    if lower.startswith("!billy help"):
+    if lower.startswith("!billy help") or lower.startswith("!help"):
         return BotResponse(usage)
 
     if lower.startswith("!meme"):
-        cmd = _shlex(lower)
+        # so we do not auto lowercase everything use the original
+        cmd = _shlex(message.content)
+
+        # did the user reply to a message with an image? if so, use that image
+        if message.reference:
+            ref = message.reference
+            try:
+                ref = await message.channel.fetch_message(message.reference.message_id)
+                if len(cmd) < 2:
+                    return BotResponse("!meme <top text> [bottom text]")
+                top = cmd[1]
+                bottom = None
+                if len(cmd) > 2:
+                    bottom = cmd[2]
+                return await meme_attached(ref, top, bottom)
+            except Exception:
+                return BotResponse("Could not get attached message")
         if (len(cmd) != 3 and len(cmd) != 4):
             return BotResponse("syntax: !meme <image url> <top text> [bottom text]")
 
@@ -421,9 +452,11 @@ async def early_out_response(lower, message):
             resp = await meme_previous(message, top, bottom)
         else:
             resp = await meme_response(url, top, bottom)
-        if resp.discord_file:
-            # remove the old image
-            await message.edit(suppress=True)
+            # remove the old image only if an image existed and we weren't
+            # meme-ing a previous
+            if resp.discord_file:
+                # remove the old image
+                await message.edit(suppress=True)
         return resp
 
     if lower.startswith("!quote"):
@@ -514,6 +547,10 @@ async def on_ready():
     print(quote_get_leaderboard())
 
 @client.event
+async def on_guild_channel_update(before, after):
+    print("Updated guild {0} {1}".format(str(before.id), str(after.id)))
+
+@client.event
 async def on_message(message):
     """on_message.
 
@@ -522,7 +559,6 @@ async def on_message(message):
     if message.author == client.user:
         return
 
-    print(message)
     lower = message.content.lower()
     resp = await early_out_response(lower, message)
     if resp:
@@ -540,6 +576,10 @@ async def on_message(message):
     church = ["church", "heavenly father", "pray"]
     if any(x in lower for x in church):
         await message.add_reaction("\N{CHURCH}")
+
+    crown = ["bezos", "elon"]
+    if any(x in lower for x in crown):
+        await message.add_reaction("👑")
 
     quote_save(message)
 
