@@ -52,6 +52,8 @@ Memes:
 
 !meme last <top text> [bottom text]
                 Use the previous image (not meme) in this channel
+!meme <top text> [bottom text]
+                When replying to a message with an image, use that image
 
 Quotes:
 Note, only long messages (excl. URLs) are saved by default.
@@ -71,7 +73,7 @@ Billy Madison:
 !help     This Message
 
 notoriousrip for compliments
-v. 3.6 (002) Not Great, Not Terrible
+v. 3.6 (003) Not Great, Not Terrible
 ```
 """
 
@@ -234,6 +236,7 @@ def quote_get_leaderboard():
 
     users = quote_db_cursor.execute("SELECT distinct user from quotes")
     users = users.fetchall()
+
     resp = "```I have saved {count} quotes.\n".format(count=count)
     resp += "Quotes are counted only if >50 characters long.\n"
     resp += "{0:<25} {1:<10} {2:<10}\n".format("User", "# Quotes", "Avg Length")
@@ -257,7 +260,7 @@ def quote_get_leaderboard():
     resp += "```"
     return resp
 
-def quote_save(message, skip_checks=False):
+def quote_save(message, skip_checks=False, add_text=None):
     """quote_save.
 
     :param message:
@@ -278,6 +281,9 @@ def quote_save(message, skip_checks=False):
     # kill off tagging others because that could be annoying
     content = message.content
     content = re.sub(r"<.*>", "", content)
+
+    if add_text:
+        content = add_text + content
 
     user = message.author.name
     uniqueID = str(_hash(user + content))
@@ -549,6 +555,21 @@ async def on_ready():
 @client.event
 async def on_guild_channel_update(before, after):
     print("Updated guild {0} {1}".format(str(before.id), str(after.id)))
+
+@client.event
+async def on_message_delete(message):
+    if message.author != client.user:
+        # protect deleter from deleting the bot's response also
+        logger.log(logging.INFO, "Got deleted message: {0}".format(str(message.content)))
+        quote_save(message, True, add_text="[🚨 MESSAGE DELETED]: ")
+        content = "🚨You cannot fool me, message deleter, {0}...".format(
+            str(message.author.name))
+    else:
+        # just send the same so we don't replace deleted message name with ours
+        content = message.content
+
+    resp = BotResponse(content)
+    await resp.send_response(client, message)
 
 @client.event
 async def on_message(message):
